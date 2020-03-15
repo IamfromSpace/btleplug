@@ -85,6 +85,7 @@ pub struct Peripheral {
     connection_rx: Arc<Mutex<Receiver<u16>>>,
     message_queue: Arc<Mutex<VecDeque<ACLData>>>,
     notification_handlers: Arc<Mutex<Vec<NotificationHandler>>>,
+    subscriptions: Arc<Mutex<BTreeSet<Characteristic>>>,
 }
 
 impl Display for Peripheral {
@@ -118,6 +119,7 @@ impl Peripheral {
             connection_rx: Arc::new(Mutex::new(connection_rx)),
             message_queue: Arc::new(Mutex::new(VecDeque::new())),
             notification_handlers: Arc::new(Mutex::new(vec!())),
+            subscriptions: Arc::new(Mutex::new(BTreeSet::new())),
         }
     }
 
@@ -232,6 +234,18 @@ impl Peripheral {
 
     fn notify(&self, characteristic: &Characteristic, enable: bool) -> Result<()> {
         info!("setting notify for {}/{:?} to {}", self.address, characteristic.uuid, enable);
+
+        // If we already have this subscription, we just return Ok
+        let mut subs = self.subscriptions.lock().unwrap();
+        if subs.contains(characteristic) {
+            return Ok(());
+        }
+
+        // Otherwise, we insert it and drop the lock.
+        // If something fails, we need to remove this subscription so we can try again.
+        subs.insert(characteristic.clone());
+        drop(subs);
+
         let mut buf = att::read_by_type_req(
             characteristic.start_handle, characteristic.end_handle, B16(GATT_CLIENT_CHARAC_CFG_UUID));
 
@@ -274,6 +288,12 @@ impl Peripheral {
             }
             Err(err) => {
                 debug!("failed to parse notify response: {:?}", err);
+
+                // Since adding the subscription failed, we should remove it from
+                // our subcription set, so it can in theory be tried again.
+                let mut subs = self.subscriptions.lock().unwrap();
+                subs.remove(characteristic);
+
                 return Err(Error::Other("failed to get characteristic state".to_string()));
             }
         };
@@ -362,6 +382,27 @@ impl Peripheral {
                 unreachable!();
             }
         };
+    }
+
+    pub fn reconnect(&self) -> Result<()> {
+        // First, we need to connect
+        self.connect()?;
+
+        // Next, we need to get our previous subscriptions, and clear the
+        // current mutex (since otherwise, they'll just return as "subscribed."
+        let subscriptions = self.subscriptions.clone();
+        let mut subs = subscriptions.lock().unwrap();
+        let old_subs = std::mem::replace(&mut *subs, BTreeSet::new());
+        drop(subs);
+
+        // Finally, we iterate over our previous subscriptions, attempting to
+        // connect.  If any one fails, we return an error.
+        old_subs.iter().fold(Ok(()), |acc: Result<()>, sub: &Characteristic| {
+            self.subscribe(sub)?;
+            acc?;
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 
