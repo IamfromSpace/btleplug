@@ -15,11 +15,14 @@ use std::{
     fmt::{self, Display, Formatter, Debug},
     collections::BTreeSet,
 };
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use crate::{
     Result,
     api::UUID::{B16, B128}
 };
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AddressType {
     Random,
@@ -48,6 +51,7 @@ impl AddressType {
 }
 
 /// Stores the 6 byte address used to identify Bluetooth devices.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 #[repr(C)]
 pub struct BDAddr {
@@ -88,6 +92,7 @@ pub type NotificationHandler = Box<dyn FnMut(ValueNotification) + Send>;
 
 /// A Bluetooth UUID. These can either be 2 bytes or 16 bytes long. UUIDs uniquely identify various
 /// objects in the Bluetooth universe.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum UUID {
     B16(u16),
@@ -287,6 +292,7 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     fn on_notification(&self, handler: NotificationHandler);
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Copy, Clone)]
 pub enum CentralEvent {
     DeviceDiscovered(BDAddr),
