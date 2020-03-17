@@ -384,49 +384,7 @@ impl Peripheral {
         };
     }
 
-    pub fn reconnect(&self) -> Result<()> {
-        // First, we need to connect
-        self.connect()?;
-
-        // Next, we need to get our previous subscriptions, and clear the
-        // current mutex (since otherwise, they'll just return as "subscribed."
-        let subscriptions = self.subscriptions.clone();
-        let mut subs = subscriptions.lock().unwrap();
-        let old_subs = std::mem::replace(&mut *subs, BTreeSet::new());
-        drop(subs);
-
-        // Finally, we iterate over our previous subscriptions, attempting to
-        // connect.  If any one fails, we return an error.
-        old_subs.iter().fold(Ok(()), |acc: Result<()>, sub: &Characteristic| {
-            self.subscribe(sub)?;
-            acc?;
-            Ok(())
-        })?;
-        Ok(())
-    }
-}
-
-impl ApiPeripheral for Peripheral {
-    fn address(&self) -> BDAddr {
-        self.address.clone()
-    }
-
-    fn properties(&self) -> PeripheralProperties {
-        let l = self.properties.lock().unwrap();
-        l.clone()
-    }
-
-    fn characteristics(&self) -> BTreeSet<Characteristic> {
-        let l = self.characteristics.lock().unwrap();
-        l.clone()
-    }
-
-    fn is_connected(&self) -> bool {
-        let l = self.stream.try_read();
-        return l.is_ok() && l.unwrap().is_some();
-    }
-
-    fn connect(&self) -> Result<()> {
+    fn first_connect(&self) -> Result<()> {
         // take lock on stream
         let mut stream = self.stream.write().unwrap();
 
@@ -469,6 +427,61 @@ impl ApiPeripheral for Peripheral {
         Ok(())
     }
 
+    fn reconnect(&self) -> Result<()> {
+        // First, we need to connect
+        self.first_connect()?;
+
+        // Next, we need to get our previous subscriptions, and clear the
+        // current mutex (since otherwise, they'll just return as "subscribed."
+        let subscriptions = self.subscriptions.clone();
+        let mut subs = subscriptions.lock().unwrap();
+        let old_subs = std::mem::replace(&mut *subs, BTreeSet::new());
+        drop(subs);
+
+        // Finally, we iterate over our previous subscriptions, attempting to
+        // connect.  If any one fails, we return an error.
+        old_subs.iter().fold(Ok(()), |acc: Result<()>, sub: &Characteristic| {
+            self.subscribe(sub)?;
+            acc?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+}
+
+impl ApiPeripheral for Peripheral {
+    fn address(&self) -> BDAddr {
+        self.address.clone()
+    }
+
+    fn properties(&self) -> PeripheralProperties {
+        let l = self.properties.lock().unwrap();
+        l.clone()
+    }
+
+    fn characteristics(&self) -> BTreeSet<Characteristic> {
+        let l = self.characteristics.lock().unwrap();
+        l.clone()
+    }
+
+    fn is_connected(&self) -> bool {
+        let l = self.stream.try_read();
+        return l.is_ok() && l.unwrap().is_some();
+    }
+
+
+    fn connect(&self) -> Result<()> {
+        let is_first_connect = {
+            let subs = self.subscriptions.lock().unwrap();
+            subs.is_empty()
+        };
+
+        if is_first_connect {
+            self.first_connect()
+        } else {
+            self.reconnect()
+        }
+    }
 
 
     fn disconnect(&self) -> Result<()> {
