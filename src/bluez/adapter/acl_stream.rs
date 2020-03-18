@@ -221,7 +221,6 @@ impl ACLStream {
                                 let mut n = notification.1.clone();
                                 if let Some(h) = n.handle {
                                     for c in self.characteristics.lock().unwrap().iter() {
-                                        info!("{} == {}", c.value_handle, h);
                                         if c.value_handle == h {
                                             n.uuid = c.uuid;
                                             break;
