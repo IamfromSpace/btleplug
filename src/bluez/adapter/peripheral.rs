@@ -583,4 +583,9 @@ impl ApiPeripheral for Peripheral {
             }
         }
     }
+
+    fn clear_notification_handlers(&self) {
+        let mut list = self.notification_handlers.lock().unwrap();
+        *list = vec![];
+    }
 }

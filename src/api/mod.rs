@@ -285,6 +285,9 @@ pub trait Peripheral: Send + Sync + Clone + Debug {
     /// the device. This method should only be used after a connection has been established. Note
     /// that the handler will be called in a common thread, so it should not block.
     fn on_notification(&self, handler: NotificationHandler);
+
+    /// Removes all registered handlers.
+    fn clear_notification_handlers(&self);
 }
 
 #[derive(Debug, Copy, Clone)]
